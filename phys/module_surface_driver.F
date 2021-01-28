@@ -293,6 +293,7 @@ CONTAINS
      &          ,irr_start_hour,irr_num_hours,irr_start_julianday     &
      &          ,irr_end_julianday,irr_freq,irr_ph,irr_rand_field     &
      &          ,tsread0, tsread1							  &  !jss
+     &          ,sfcwrap							  &  !jss
 	 &			,jss_starthour, jss_startday, jss_startmonth, jss_startyear  &
      &                                                             )
 
@@ -1386,7 +1387,7 @@ CONTAINS
    INTEGER, INTENT(IN   )                              ::   fasdas
 
    !jss
-   INTEGER, INTENT(IN   )                              ::   jss_starthour, jss_startday, jss_startmonth, jss_startyear
+   INTEGER, INTENT(IN   )                              ::   sfcwrap,jss_starthour, jss_startday, jss_startmonth, jss_startyear
    REAL, DIMENSION( ims:ime, jms:jme )                 ::   tsread0, tsread1
    
 ! local vars
@@ -1945,6 +1946,7 @@ CONTAINS
 	 case (hydroblocksles)
 
          CALL jssskintemp(xtime,jss_starthour,jss_startday,jss_startmonth, jss_startyear,tsk,                     &
+					 sfcwrap, &
 					 tsread0, tsread1, &
                      ids, ide, jds, jde, kds, kde,                       &
                      ims, ime, jms, jme, kms, kme,                       &

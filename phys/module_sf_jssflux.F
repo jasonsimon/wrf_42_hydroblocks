@@ -239,7 +239,7 @@ contains
 
 
 subroutine jssskintemp(xtime,starthour,startday,startmonth,startyear, &
-					 tsk, tsread0, tsread1, &
+					 tsk, sfcwrap, tsread0, tsread1, &
                      ids, ide, jds, jde, kds, kde,                              &
                      ims, ime, jms, jme, kms, kme,                              &
                      its, ite, jts, jte, kts, kte   )
@@ -252,7 +252,7 @@ subroutine jssskintemp(xtime,starthour,startday,startmonth,startyear, &
                                        its, ite, jts, jte, kts, kte        
 !   
    real, intent(in)      ::         xtime
-   integer, intent(in)      ::      starthour, startday, startmonth, startyear
+   integer, intent(in)      ::      sfcwrap, starthour, startday, startmonth, startyear
 !
  !
    real, dimension( ims:ime, jms:jme )                                        , &
@@ -399,6 +399,19 @@ subroutine jssskintemp(xtime,starthour,startday,startmonth,startyear, &
 
      enddo
    enddo
+
+	if (sfcwrap.eq.1) then
+
+	   CALL jss_wrapper_surface(  tsk,				 &
+								  ids, ide, jds, jde, kds, kde,      &
+								  ims, ime, jms, jme, kms, kme,      &
+							 	  its, ite, jts, jte, kts, kte      )
+
+
+
+	  endif
+
+
 
 
 end subroutine jssskintemp
