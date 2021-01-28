@@ -18,6 +18,7 @@ MODULES =                 		\
 	module_damping_em.o		\
 	module_polarfft.o		\
         module_force_scm.o              \
+        module_force_crm.o              \
         module_first_rk_step_part1.o    \
         module_first_rk_step_part2.o    \
         module_avgflx_em.o              \

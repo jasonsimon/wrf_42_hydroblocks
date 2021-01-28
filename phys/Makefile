@@ -194,7 +194,8 @@ MODULES = \
 	module_sf_lake.o \
 	module_diagnostics_driver.o \
 	module_irrigation.o \
-	module_crm_stat.o 
+	module_crm_stat.o \
+	module_crm_phy.o 
 
 FIRE_MODULES = \
         module_fr_fire_driver.o \

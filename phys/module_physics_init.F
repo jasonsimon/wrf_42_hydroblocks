@@ -1137,6 +1137,29 @@ CONTAINS
        MAVAIL(i,j)=1.0
      ENDIF
 
+! *********************************************************
+! crm: overwrite initial land surface parameters 
+
+     IF( config_flags%crm_lupar_opt .eq. 1 .and. &
+      &  mminlu_loc .EQ. '    ' .and. XLAND(i,j) .LT. 1.5) then 
+
+       if(config_flags%crm_albedo_opt .ne. 0) ALBBCK(i,j) = config_flags%crm_albedo
+       ALBEDO(i,j) = ALBBCK(i,j)
+
+       EMBCK(i,j) = config_flags%crm_emiss
+       EMISS(i,j) = EMBCK(i,j)
+       
+       ZNT(i,j) = config_flags%crm_znt
+       Z0(i,j)  = ZNT(i,j)
+
+       THC(i,j) = config_flags%crm_thc             
+       MAVAIL(i,j) = config_flags%crm_mavail
+
+     ENDIF
+! crm end
+! *********************************************************
+
+
    ENDDO
    ENDDO
 

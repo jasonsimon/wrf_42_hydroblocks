@@ -138,6 +138,8 @@ CONTAINS
    !real, dimension( 251, 251 )  :: latgrid, longrid
    !real  :: latgridsingle, longridsingle
 
+   real, dimension( grid%sd31:grid%ed31, grid%sd33:grid%ed33 )  :: tsk
+
 
    REAL, PARAMETER :: htbub=8000., radbub=2000000., radz=8000., tpbub=1.0
    REAL :: piov2, tp
@@ -611,6 +613,13 @@ if (config_flags%jss_crmlat.eq.1) then
 	print *, "jss post-grid"
 endif
 
+	call jssskintemp(0.0,config_flags%jss_starthour,config_flags%jss_startday, &
+					 config_flags%jss_startmonth,config_flags%start_year, &
+					 tsk, config_flags%jss_sfcwrap,  &
+                     ids, ide, jds, jde, kds, kde,                              &
+                     ims, ime, jms, jme, kms, kme,                              &
+                     its, ite, jts, jte, kts, kte   )
+
     DO j = jts, jte
       DO i = its, ite
          grid%msftx(i,j)    = 1.
@@ -626,12 +635,10 @@ endif
          !grid%f(i,j)        = 1.e-04
 
 		if (config_flags%jss_crmlat.eq.1) then
-			print *, "jss setting lat/lon"
 			 grid%xlat(i,j)     = latgrid(i,j)
 			 grid%xlong(i,j)    = longrid(i,j)
 
 			 if (config_flags%jss_crmcor.gt.0) then
-				print *, "jss setting e/f"
 				 grid%e(i,j)        = 2.0*EOMEG*cos(longrid(i,j)*DEGRAD) 
 				 grid%f(i,j)        = 2.0*EOMEG*sin(latgrid(i,j)*DEGRAD)
 			 endif
@@ -641,6 +648,9 @@ endif
 			 !grid%f(i,j)        = 0.
 			 grid%f(i,j)        = 1.e-04
 		 endif
+
+         grid%albedo(i,j)   = config_flags%crm_albedo
+         grid%tsk(i,j)      = tsk(i,j)
 
       END DO
    END DO
@@ -1728,6 +1738,24 @@ endif
   ENDDO
   ENDDO
 
+! ***** for wdm, initial ccn ****** 
+
+  micro_select: SELECT CASE(config_flags%mp_physics)
+
+   CASE (WDM5SCHEME, WDM6SCHEME)
+
+      DO J = jts, min(jde-1,jte)
+      DO K = kts, kte
+      DO I = its, min(ide-1,ite)
+
+        scalar(i,k,j,P_QNN) = config_flags%crm_init_ccn * 1000000 / grid%alb(i,k,j)  ! kg-1
+
+      ENDDO
+      ENDDO
+      ENDDO
+
+   END SELECT micro_select
+
 !  set a few more things
 
   DO J = jts, min(jde-1,jte)
@@ -1801,7 +1829,7 @@ endif
   CASE(les)
   DO J = jts, min(jde-1,jte)
   DO I = its, min(ide-1,ite)
-         grid%tsk(i,j) = theta_surf * (p_surf/p1000mb)**rcp
+         !grid%tsk(i,j) = theta_surf * (p_surf/p1000mb)**rcp
          grid%tmn(i,j) = grid%tsk(i,j)-0.5
   ENDDO
   ENDDO
@@ -2548,6 +2576,262 @@ endif
    
    end subroutine jssgrid
 
+subroutine jssskintemp(xtime,starthour,startday,startmonth,startyear, &
+					 tsk, sfcwrap,  &
+                     ids, ide, jds, jde, kds, kde,                              &
+                     ims, ime, jms, jme, kms, kme,                              &
+                     its, ite, jts, jte, kts, kte   )
+!-------------------------------------------------------------------
+      implicit none
+!-------------------------------------------------------------------
+!
+   integer, intent(in)   ::                       ids, ide, jds, jde, kds, kde, &
+                                                  ims, ime, jms, jme, kms, kme, &
+                                       its, ite, jts, jte, kts, kte        
+!   
+   real, intent(in)      ::         xtime
+   integer, intent(in)      ::      sfcwrap, starthour, startday, startmonth, startyear
+!
+ !
+   real, dimension( ids:ide, jds:jde )                                        , &
+            intent(inout)::                                                tsk
+                                                                           
+! local vars
+
+   character*256 :: filesh0, filesh1, filelh0, filelh1,fractout
+   character(len=2) :: hr0,hr1,mn0,mn1,dy0,dy1,mo0,mo1
+   character(len=4) :: yr
+   integer, parameter    ::                                       n_max = 1200
+   integer               ::                                 i, j, n, nm, nt, m
+   integer               ::                                 newread, month0, &
+															month1
+   real, parameter       ::                                           den = 1.
+   real :: mn, fract
+   integer :: hr, day
+   real                  ::                         julian_s, julian_e, fc_int, &
+                                                            fm, fh, ch, dtdiff
+   !real, dimension( 1:n_max ) ::                     fc_qfx, fc_hfx, fc_julian !JP 0 ->1
+   real, dimension(ids:ide, jds:jde) :: fc_tsk, fc_tsk0, fc_tsk1
+   real                       ::                     tsk_interp
+    logical               ::                                        end_of_file
+!
+!-----open scmflx_bdy and read the julian_s, julian_e, fc_int
+!
+
+
+	hr = int(xtime / 60.0) 
+	mn = xtime - hr*60
+	day = startday
+	month0 = startmonth
+
+	hr = hr + starthour
+	if (hr.ge.24) then
+		hr = hr - 24
+		day = day + 1
+		call jss_monthwrap( startmonth, month0, day )
+	elseif (hr.ge.48) then
+		hr = hr - 48
+		day = day + 2
+		call jss_monthwrap( startmonth, month0, day )
+	endif
+
+	write(yr,'(I4.4)') startyear
+	write(mo0,'(I2.2)') month0
+	write(hr0,'(I2.2)') hr
+	write(dy0,'(I2.2)') day
+
+	if (hr.eq.23) then
+		write(hr1,'(I2.2)') 0
+		write(dy1,'(I2.2)') day + 1
+		call jss_monthwrap( startmonth, month1, day+1 )
+		write(mo1,'(I2.2)') month1
+	else
+		write(hr1,'(I2.2)') hr + 1
+		write(dy1,'(I2.2)') day
+		write(mo1,'(I2.2)') month0
+	endif
+
+
+	newread = 1
+
+	!print *, yr,mo,dy0,hr0
+	!print *, yr,mo,dy1,hr1
+	!print *, hr,mn,day
+
+	fract = modulo(xtime,60.0) / 60.0
+
+
+	if (newread.eq.1) then
+		filesh0 = 'jsstsk_bdy_'//trim(yr)//'-'//trim(mo0)//'-'//trim(dy0)//'-'//trim(hr0)//'-00'
+		filesh1 = 'jsstsk_bdy_'//trim(yr)//'-'//trim(mo1)//'-'//trim(dy1)//'-'//trim(hr1)//'-00'
+
+		print *, trim(filesh0)
+		print *, trim(filesh1)
+		!print *, trim(filelh0)
+		!print *, trim(filelh1)
+		!call wrf_debug(100, filesh0)
+		!call wrf_debug(100, filesh1)
+		!call wrf_debug(100, filelh0)
+		!call wrf_debug(100, filelh1)
+
+		open(unit=11, file=filesh0, form='formatted', status='old')
+		read(11,*) fc_tsk0
+		close(11)
+
+		open(unit=11, file=filesh1, form='formatted', status='old')
+		read(11,*) fc_tsk1
+		close(11)
+
+		!open(unit=11, file=filelh0, form='formatted', status='old')
+		!read(11,*) fc_lh0
+		!close(11)
+
+		!open(unit=11, file=filelh1, form='formatted', status='old')
+		!read(11,*) fc_lh1
+		!close(11)
+
+		!print *, 'fract',fract
+
+		fc_tsk0 = fc_tsk0(:,jde:jds:-1)
+		fc_tsk1 = fc_tsk1(:,jde:jds:-1)
+
+
+	endif
+
+	!fc_hfx = fc_hfx0 + (fc_hfx1 - fc_hfx0) * fract
+	!fc_lh = fc_lh0 + (fc_lh1 - fc_lh0) *  fract
+
+
+	!fc_hfx = fc_hfx(:,jde:jds:-1)
+	!fc_lh = fc_lh(:,jde:jds:-1)
+
+!
+   do j=jts, jte
+     do i=its, ite
+
+
+			tsk(i,j)=fc_tsk0(i,j)  + (fc_tsk1(i,j) - fc_tsk0(i,j))*fract
+
+     enddo
+   enddo
+
+	if (sfcwrap.eq.1) then
+
+	   CALL jss_wrapper_surface(  tsk,				 &
+								  ids, ide, jds, jde, kds, kde,      &
+								  ims, ime, jms, jme, kms, kme,      &
+							 	  its, ite, jts, jte, kts, kte      )
+
+
+
+	  endif
+
+
+
+
+end subroutine jssskintemp
+
+SUBROUTINE jss_wrapper_surface( flux,                  &
+								ids,ide, jds,jde, kds,kde,           &
+								ims,ime, jms,jme, kms,kme,           &
+								its,ite, jts,jte, kts,kte           )
+
+!-----------------------------------------------------------------------
+! Begin declarations.
+
+	use module_dm, only: wrf_dm_sum_real !jss
+    USE module_configure, ONLY : grid_config_rec_type, model_config_rec
+
+   IMPLICIT NONE
+
+   INTEGER ,          INTENT(IN   )           :: ids, ide, jds, jde, kds, kde, &
+                                                 ims, ime, jms, jme, kms, kme, &
+                                                 its, ite, jts, jte, kts, kte
+
+   REAL, DIMENSION( ims:ime , jms:jme ) , INTENT(INOUT) ::     flux
+
+! LOCAL VARS
+
+   INTEGER :: i, j, k
+   REAL    :: totflux, meanflux, np2d
+
+! End declarations.
+!-----------------------------------------------------------------------
+
+	totflux = 0.0
+
+	DO j = jts, jte
+	DO i = its, ite
+		totflux = totflux + flux(i,j)
+	ENDDO
+	ENDDO
+
+	np2d = float((ide-ids)*(jde-jds))
+
+	totflux = wrf_dm_sum_real( totflux )
+
+	meanflux = totflux / np2d
+
+	DO j = jts, jte
+	DO i = its, ite
+		flux(i,j) = meanflux
+	ENDDO
+	ENDDO
+
+
+END SUBROUTINE jss_wrapper_surface
+
+SUBROUTINE jss_monthwrap( mo0,mo1,day )
+
+!-----------------------------------------------------------------------
+! Begin declarations.
+
+   IMPLICIT NONE
+
+   INTEGER ,          INTENT(IN   )           :: mo0,day
+   INTEGER ,          INTENT(INOUT)           :: mo1
+
+
+! LOCAL VARS
+
+   INTEGER :: lastday
+
+! End declarations.
+!-----------------------------------------------------------------------
+
+
+	if (mo0.eq.1) then !jan
+		lastday = 31
+	elseif (mo0.eq.2) then !feb
+		lastday = 28
+	elseif (mo0.eq.3) then !mar
+		lastday = 31
+	elseif (mo0.eq.4) then !apr
+		lastday = 30
+	elseif (mo0.eq.5) then !may
+		lastday = 31
+	elseif (mo0.eq.6) then !jun
+		lastday = 30
+	elseif (mo0.eq.7) then !jul
+		lastday = 31
+	elseif (mo0.eq.8) then !aug
+		lastday = 31
+	elseif (mo0.eq.9) then !sep
+		lastday = 30
+	elseif (mo0.eq.10) then !oct
+		lastday = 31
+	elseif (mo0.eq.11) then !nov
+		lastday = 30
+	elseif (mo0.eq.12) then !dec
+		lastday = 31
+	endif
+
+	mo1 = mo0
+	if (day.gt.lastday) then
+		mo1 = mo0 + 1
+	endif
+
+END SUBROUTINE jss_monthwrap
 
 
 END MODULE module_initialize_ideal

@@ -31,6 +31,11 @@ dimspec    [       -     namelist=obs_prt_max              c     obs_prt_max
 dimspec    obsstid -     constant=40                       c     obs station id names
 dimspec    &       2     namelist=lagday                   z     lagday
 dimspec    seed    1     namelist=seed_dim                 z     seed_dim
+######### 
+# crm
+dimspec    lsf     2     namelist=crm_num_force_layers     z     force_layers
+dimspec    aer     2     namelist=crm_num_aer_layers       z     aer_layers
+#########
 endif
 
 

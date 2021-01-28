@@ -47,6 +47,7 @@ CONTAINS
     USE module_fddagd_driver, ONLY : fddagd_driver
     USE module_em, ONLY : init_zero_tendency
     USE module_force_scm
+    USE module_force_crm  !* compute forcings
     USE module_convtrans_prep
     USE module_big_step_utilities_em, ONLY : phy_prep
 !use module_scalar_tables
@@ -922,9 +923,78 @@ BENCH_END(surf_driver_tim)
 
 
 
-! jss
-! adding a wrapper to the surface fluxes
+!###################################################################
+!* crm: update large-scale and surface forcings
 
+
+      CALL wrf_debug ( 200 , ' call force_crm' )
+      CALL force_crm(itimestep=grid%itimestep,dt=grid%dt                  &
+     &            ,crm_num_force_layers=config_flags%crm_num_force_layers &
+     &             ,crm_force_opt=config_flags%crm_force_opt              &
+     &             ,crm_th_adv_opt=config_flags%crm_th_adv_opt            &
+     &             ,crm_th_rlx_opt=config_flags%crm_th_rlx_opt            &
+     &             ,crm_qv_adv_opt=config_flags%crm_qv_adv_opt            &
+     &             ,crm_qv_rlx_opt=config_flags%crm_qv_rlx_opt            &
+     &             ,crm_adj_uv_opt=config_flags%crm_adj_uv_opt            &
+     &             ,crm_uv_rlx_opt=config_flags%crm_uv_rlx_opt             &
+     &             ,crm_vert_adv_opt=config_flags%crm_vert_adv_opt        &
+     &             ,crm_wcpa_opt=config_flags%crm_wcpa_opt                &
+     &             ,crm_tau_s=config_flags%crm_tau_s                       &
+     &             ,crm_tau_m=config_flags%crm_tau_m                       &
+     &             ,crm_ust_opt=config_flags%crm_ust_opt                  &
+     &             ,crm_ust=config_flags%crm_ust                          &
+     &             ,th_adv=grid%th_adv, th_adv_tend=grid%th_adv_tend      &
+     &             ,th_rlx=grid%th_rlx, th_rlx_tend=grid%th_rlx_tend      &
+     &             ,qv_adv=grid%qv_adv, qv_adv_tend=grid%qv_adv_tend      &
+     &             ,qv_rlx=grid%qv_rlx, qv_rlx_tend=grid%qv_rlx_tend      &
+     &             ,u_ls=grid%u_ls, u_ls_tend=grid%u_ls_tend            &
+     &             ,v_ls=grid%v_ls, v_ls_tend=grid%v_ls_tend            &
+     &             ,w_ls=grid%w_ls, w_ls_tend=grid%w_ls_tend            &
+     &             ,z_ls=grid%z_ls, z_ls_tend=grid%z_ls_tend            &
+     &             ,inv_tau_s=grid%inv_tau_s,inv_tau_m=grid%inv_tau_m  &
+     &             ,u_base=grid%u_base, v_base=grid%v_base               &
+     &             ,z_base=grid%z_base                                   &
+     &             ,z=grid%z,  z_at_w=grid%z_at_w                         &
+     &             ,p=grid%p_hyd, p8w=grid%p_hyd_w, rho=grid%rho               &
+     &             ,th=th_phy, qv=moist(ims,kms,jms,P_QV)                 &
+     &             ,u=grid%u_phy,   v=grid%v_phy                                    &
+     &             ,znt=grid%znt                                       &
+     &             ,thten=grid%rthlsten, qvten=grid%rqvlsten            &
+     &             ,uten=grid%rulsten,vten=grid%rvlsten                 &
+     &             ,w_dthdz=grid%w_dthdz, w_dqvdz=grid%w_dqvdz      &
+     &             ,w_dudz=grid%w_dudz,   w_dvdz=grid%w_dvdz        &
+     &             ,th_adv_term=grid%thdt_lshor,qv_adv_term=grid%qvdt_lshor &
+     &             ,th_rlx_term=grid%thdt_lsrlx,qv_rlx_term=grid%qvdt_lsrlx &
+     &             ,u_rlx_term=grid%udt_lsrlx,  v_rlx_term=grid%vdt_lsrlx   &
+     &             ,isfflx=config_flags%isfflx                            & 
+     &             ,crm_flx_opt=config_flags%crm_flx_opt                  &
+     &             ,crm_albedo_opt=config_flags%crm_albedo_opt            &
+     &             ,crm_tsk_opt=config_flags%crm_tsk_opt                  &
+     &             ,crm_sh_flx=config_flags%crm_sh_flx                    &
+     &             ,crm_lh_flx=config_flags%crm_lh_flx                    &
+     &             ,crm_flx_ct=config_flags%crm_flx_ct                    &
+     &             ,crm_flx_psfcpa=config_flags%crm_flx_psfcpa            &
+     &             ,crm_albedo=config_flags%crm_albedo                    &
+     &             ,crm_tsk=config_flags%crm_tsk                          &
+     &             ,pre_sh_flx=grid%pre_sh_flx                            &
+     &             ,pre_sh_flx_tend=grid%pre_sh_flx_tend                  &
+     &             ,pre_lh_flx=grid%pre_lh_flx                            &
+     &             ,pre_lh_flx_tend=grid%pre_lh_flx_tend                  &
+     &             ,pre_albedo=grid%pre_albedo                            &
+     &             ,pre_albedo_tend=grid%pre_albedo_tend                  &
+     &             ,pre_tsk=grid%pre_tsk                                  &
+     &             ,pre_tsk_tend=grid%pre_tsk_tend                        &
+     &             ,hfx=grid%hfx, qfx=grid%qfx                            &
+     &             ,albedo=grid%albedo, tsk=grid%tsk                      &
+     &             ,ust=grid%ust, lh=grid%lh                              &
+     &             ,IDS=ids,IDE=ide, JDS=jds,JDE=jde, KDS=kds,KDE=kde     &
+     &             ,IMS=ims,IME=ime, JMS=jms,JME=jme, KMS=kms,KME=kme     &
+     &             ,IPS=ips,IPE=ipe, JPS=jps,JPE=jpe, KPS=kps,KPE=kpe     &
+     &             , I_START=grid%i_start,I_END=min(grid%i_end, ide-1)    &
+     &             , J_START=grid%j_start,J_END=min(grid%j_end, jde-1)    &
+     &             , KTS=k_start, KTE=min(k_end,kde-1)                    &
+     &             ,NUM_TILES=grid%num_tiles                              &
+     &              )
 
 
 
